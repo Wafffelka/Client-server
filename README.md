@@ -1,1 +1,4 @@
-# Client-server
+
+### Результат работы программы: 
+
+![rezult.jpg](rezult.jpg)
