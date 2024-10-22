@@ -1,113 +1,147 @@
 package Client_server.client;
 
+import Client_server.server.Server;
+
 import javax.swing.*;
 import java.awt.*;
-import java.io.*;
-import java.net.*;
+import java.awt.event.*;
 
-public class Client {
-    private static final String SERVER_ADDRESS = "127.0.0.1";
-    private static final int SERVER_PORT = 8189;
-    private String clientName;
+public class Client extends JFrame {
+    public static final int WIDTH = 400;
+    public static final int HEIGHT = 300;
 
-    private Socket socket;
-    private PrintWriter out;
-    private BufferedReader in;
+    private Server server;
+    private boolean connected;
+    private String name;
 
-    private JFrame frame;
-    private JTextField messageField;
-    private JTextArea chatArea;
-    private JTextField nameField;
-    private JPasswordField passwordField;
+    JTextArea log;
+    JTextField tfIPAddress, tfPort, tfLogin, tfMessage;
+    JPasswordField password;
+    JButton btnLogin, btnSend;
+    JPanel headerPanel;
 
-    public Client(String clientName) {
-        this.clientName = clientName;
-        setupGUI();
+    public Client(Server server){
+        this.server = server;
+
+        setSize(WIDTH, HEIGHT);
+        setResizable(false);
+        setTitle("Chat client");
+        setLocation(server.getX() - 500, server.getY());
+
+        createPanel();
+
+        setVisible(true);
     }
 
-    public void start() {
-        connectToServer();
-    }
-
-    private void setupGUI() {
-        frame = new JFrame(clientName + " - Chat client");
-        frame.setSize(400, 300);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
-        JPanel panel = new JPanel(new BorderLayout());
-
-        // Панель для ввода логина
-        JPanel loginPanel = new JPanel(new GridLayout(2, 2));
-        loginPanel.add(new JLabel("Имя:"));
-        nameField = new JTextField();
-        nameField.setText(clientName);  // Автозаполнение имени клиента
-        loginPanel.add(nameField);
-
-        loginPanel.add(new JLabel("Пароль:"));
-        passwordField = new JPasswordField();
-        loginPanel.add(passwordField);
-
-        JButton loginButton = new JButton("login");
-        loginButton.addActionListener(e -> connectToServer());
-
-        JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.add(loginPanel, BorderLayout.CENTER);
-        topPanel.add(loginButton, BorderLayout.EAST);
-
-        panel.add(topPanel, BorderLayout.NORTH);
-
-        // Поле для чата
-        chatArea = new JTextArea();
-        chatArea.setEditable(false);
-        panel.add(new JScrollPane(chatArea), BorderLayout.CENTER);
-
-        // Поле для ввода сообщений
-        messageField = new JTextField();
-        messageField.addActionListener(e -> sendMessage());
-
-        JButton sendButton = new JButton("send");
-        sendButton.addActionListener(e -> sendMessage());
-
-        JPanel bottomPanel = new JPanel(new BorderLayout());
-        bottomPanel.add(messageField, BorderLayout.CENTER);
-        bottomPanel.add(sendButton, BorderLayout.EAST);
-
-        panel.add(bottomPanel, BorderLayout.SOUTH);
-
-        frame.add(panel);
-        frame.setVisible(true);
+    public void answer(String text){
+        appendLog(text);
     }
 
     private void connectToServer() {
-        try {
-            socket = new Socket(SERVER_ADDRESS, SERVER_PORT);
-            out = new PrintWriter(socket.getOutputStream(), true);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-            // Отправить имя на сервер
-            out.println(clientName);
-
-            new Thread(() -> {
-                try {
-                    String message;
-                    while ((message = in.readLine()) != null) {
-                        chatArea.append(message + "\n");
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }).start();
-        } catch (IOException e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(frame, "Не удалось подключиться к серверу");
+        if (server.connectUser(this)){
+            appendLog("Вы успешно подключились!\n");
+            headerPanel.setVisible(false);
+            connected = true;
+            name = tfLogin.getText();
+            String log = server.getLog();
+            if (log != null){
+                appendLog(log);
+            }
+        } else {
+            appendLog("Подключение не удалось");
         }
     }
 
-    private void sendMessage() {
-        String message = messageField.getText();
-        if (!message.isEmpty()) {
-            out.println(message);
-            messageField.setText("");
+    public void disconnectFromServer() {
+        if (connected) {
+            headerPanel.setVisible(true);
+            connected = false;
+            server.disconnectUser(this);
+            appendLog("Вы были отключены от сервера!");
         }
+    }
+
+    public void message(){
+        if (connected){
+            String text = tfMessage.getText();
+            if (!text.equals("")){
+                server.message(name + ": " + text);
+                tfMessage.setText("");
+            }
+        } else {
+            appendLog("Нет подключения к серверу");
+        }
+
+    }
+
+    private void appendLog(String text){
+        log.append(text + "\n");
+    }
+
+    private void createPanel() {
+        add(createHeaderPanel(), BorderLayout.NORTH);
+        add(createLog());
+        add(createFooter(), BorderLayout.SOUTH);
+    }
+
+    private Component createHeaderPanel(){
+        headerPanel = new JPanel(new GridLayout(2, 3));
+        tfIPAddress = new JTextField("127.0.0.1");
+        tfPort = new JTextField("8189");
+        tfLogin = new JTextField("Ivan Ivanovich");
+        password = new JPasswordField("123456");
+        btnLogin = new JButton("login");
+        btnLogin.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                connectToServer();
+            }
+        });
+
+        headerPanel.add(tfIPAddress);
+        headerPanel.add(tfPort);
+        headerPanel.add(new JPanel());
+        headerPanel.add(tfLogin);
+        headerPanel.add(password);
+        headerPanel.add(btnLogin);
+
+        return headerPanel;
+    }
+
+    private Component createLog(){
+        log = new JTextArea();
+        log.setEditable(false);
+        return new JScrollPane(log);
+    }
+
+    private Component createFooter() {
+        JPanel panel = new JPanel(new BorderLayout());
+        tfMessage = new JTextField();
+        tfMessage.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                if (e.getKeyChar() == '\n'){
+                    message();
+                }
+            }
+        });
+        btnSend = new JButton("send");
+        btnSend.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                message();
+            }
+        });
+        panel.add(tfMessage);
+        panel.add(btnSend, BorderLayout.EAST);
+        return panel;
+    }
+
+    @Override
+    protected void processWindowEvent(WindowEvent e) {
+        if (e.getID() == WindowEvent.WINDOW_CLOSING){
+            disconnectFromServer();
+        }
+        super.processWindowEvent(e);
     }
 }
